@@ -56,6 +56,10 @@ struct Settings: Sendable {
         }
     }
 
+    func avatarURL(userId: UUID, version: Int?) -> String? {
+        version.map { "\(publicURL)/avatars/\(userId.uuidString)?v=\($0)" }
+    }
+
     func joinLink(roomId: UUID) -> String { "\(publicURL)/join/\(roomId.uuidString)" }
     func appJoinURL(roomId: UUID) -> String { "\(appURLScheme)://rooms/join/\(roomId.uuidString)" }
 }

@@ -19,6 +19,8 @@ final class User: Model, Authenticatable, @unchecked Sendable {
     @OptionalField(key: "device_token") var deviceToken: String?
     /// `PushEnvironment` raw value the device token was issued for
     @OptionalField(key: "device_environment") var deviceEnvironment: String?
+    /// Increased on every photo upload and added to avatar link
+    @OptionalField(key: "avatar_version") var avatarVersion: Int?
     @Timestamp(key: "created_at", on: .create) var createdAt: Date?
 
     init() {}

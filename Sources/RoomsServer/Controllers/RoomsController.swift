@@ -279,7 +279,8 @@ struct RoomPresenter {
                 happeningsCount: try await happenings().count(),
                 lastHappeningDate: try await happenings().max(\.$dateCreated),
                 notificationsEnabled: !muted.contains(userId),
-                isCurrentUser: userId == viewerId
+                isCurrentUser: userId == viewerId,
+                avatarURL: settings.avatarURL(userId: userId, version: user.avatarVersion)
             ))
         }
 

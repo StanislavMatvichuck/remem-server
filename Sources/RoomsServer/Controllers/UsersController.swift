@@ -23,7 +23,7 @@ struct UsersController: RouteCollection {
         try await user.save(on: req.db)
 
         let response = Response(status: .created)
-        try response.content.encode(RegistrationDTO(user: UserDTO(user), token: token))
+        try response.content.encode(RegistrationDTO(user: UserDTO(user, settings: req.application.settings), token: token))
         return response
     }
 }
@@ -31,6 +31,7 @@ struct UsersController: RouteCollection {
 struct ProfileController: RouteCollection {
     func boot(routes: any RoutesBuilder) throws {
         routes.patch("users", "me", use: update)
+        routes.on(.PUT, "users", "me", "avatar", body: .collect(maxSize: AvatarImage.maxSize), use: uploadAvatar)
     }
 
     /// `PATCH /v1/users/me`
@@ -61,6 +62,32 @@ struct ProfileController: RouteCollection {
         }
 
         try await user.save(on: req.db)
-        return try UserDTO(user)
+        return try UserDTO(user, settings: req.application.settings)
+    }
+
+    /// `PUT /v1/users/me/avatar` with JPEG or PNG bytes as body
+    @Sendable func uploadAvatar(req: Request) async throws -> UserDTO {
+        let user = try req.auth.require(User.self)
+        let userId = try user.requireID()
+
+        guard let body = req.body.data, body.readableBytes > 0 else { throw Abort(.badRequest) }
+        guard body.readableBytes <= AvatarImage.maxBytes else { throw Abort(.payloadTooLarge) }
+        let data = Data(body.readableBytesView)
+        guard let contentType = AvatarImage.contentType(of: data) else { throw Abort(.unsupportedMediaType) }
+
+        try await req.db.transaction { db in
+            if let avatar = try await Avatar.query(on: db).filter(\.$user.$id == userId).first() {
+                avatar.data = data
+                avatar.contentType = contentType.serialize()
+                try await avatar.save(on: db)
+            } else {
+                try await Avatar(userId: userId, data: data, contentType: contentType.serialize()).create(on: db)
+            }
+
+            user.avatarVersion = (user.avatarVersion ?? 0) + 1
+            try await user.save(on: db)
+        }
+
+        return try UserDTO(user, settings: req.application.settings)
     }
 }

@@ -90,6 +90,7 @@ All bodies are JSON, and dates are ISO 8601. Every `/v1` endpoint except registr
 | `GET` | `/health` | | `ok` |
 | `POST` | `/v1/users` | `{name, color}` | `201 {user, token}`, token is shown once and stored hashed |
 | `PATCH` | `/v1/users/me` | `{name?, color?, deviceToken?, deviceEnvironment?}` | `User`; `deviceEnvironment` is `sandbox` (default) or `production` |
+| `PUT` | `/v1/users/me/avatar` | JPEG or PNG bytes, up to 10 MB | `User` with new `avatarURL`; other content is rejected with `415` |
 | `GET` | `/v1/rooms` | | `[Room]` of the current user |
 | `POST` | `/v1/rooms` | `{name, eventName}` | `201 Room`, creator becomes the first member |
 | `GET` | `/v1/rooms/:roomId` | | `Room`, members only |
@@ -98,6 +99,7 @@ All bodies are JSON, and dates are ISO 8601. Every `/v1` endpoint except registr
 | `POST` | `/v1/rooms/:roomId/happenings` | `{id, dateCreated}` | `Room`, records a swipe and notifies members; `id` makes it idempotent |
 | `PUT` | `/v1/rooms/:roomId/members/:userId/notifications` | `{enabled}` | `Room`, turns notifications about that member on or off for the current user |
 | `GET` | `/join/:roomId` | | HTML page that opens `remem://rooms/join/<roomId>` |
+| `GET` | `/avatars/:userId?v=<version>` | | Photo, public and cached for a year; each upload increases `v` |
 
 ```jsonc
 // Room
@@ -113,12 +115,15 @@ All bodies are JSON, and dates are ISO 8601. Every `/v1` endpoint except registr
     "happeningsCount": 3,
     "lastHappeningDate": "2026-10-27T10:00:00Z",
     "notificationsEnabled": true, // for the requesting user
-    "isCurrentUser": false
+    "isCurrentUser": false,
+    "avatarURL": "https://<domain>/avatars/<id>?v=1" // absent without photo
   }]
 }
 ```
 
 The app mirrors these types in `DataLayer/Rooms/RoomsDTO.swift` of the Remem repository.
+
+Photos are stored in Postgres because files written inside a Railway container are erased on redeploy. The app uploads a 512×512 JPEG of about 50 KB.
 
 ## iOS app setup for push
 

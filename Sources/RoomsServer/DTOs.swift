@@ -13,6 +13,7 @@ struct UserDTO: Content, Equatable {
     let id: UUID
     let name: String
     let color: String
+    let avatarURL: String?
 }
 
 struct RegistrationDTO: Content {
@@ -29,6 +30,8 @@ struct MemberDTO: Content, Equatable {
     /// Whether requesting user receives notifications when this member swipes
     let notificationsEnabled: Bool
     let isCurrentUser: Bool
+    /// Absent until member uploads a photo
+    let avatarURL: String?
 }
 
 struct RoomDTO: Content, Equatable {
@@ -91,7 +94,13 @@ enum Limits {
 }
 
 extension UserDTO {
-    init(_ user: User) throws {
-        self.init(id: try user.requireID(), name: user.name, color: user.color)
+    init(_ user: User, settings: Settings) throws {
+        let id = try user.requireID()
+        self.init(
+            id: id,
+            name: user.name,
+            color: user.color,
+            avatarURL: settings.avatarURL(userId: id, version: user.avatarVersion)
+        )
     }
 }

@@ -25,6 +25,7 @@ func configure(_ app: Application, settings: Settings = Settings()) async throws
     app.migrations.add(CreateRoomHappening())
     app.migrations.add(CreateNotificationMute())
     app.migrations.add(AddUserDeviceEnvironment())
+    app.migrations.add(AddAvatars())
 
     if settings.autoMigrate || app.environment == .testing {
         try await app.autoMigrate()
