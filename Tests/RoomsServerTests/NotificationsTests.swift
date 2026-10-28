@@ -106,4 +106,69 @@ final class NotificationsTests: RoomsServerTestCase {
         let deliveries = await pushNotifier.deliveries
         XCTAssertEqual(deliveries.first?.deviceTokens, ["bobDevice"])
     }
+
+    // MARK: - Device environments
+
+    func test_swipe_routesTokensByEnvironment() async throws {
+        let alice = try await register("Alice")
+        let bob = try await register("Bob", deviceToken: "bobDevice", environment: .sandbox)
+        let carol = try await register("Carol", deviceToken: "carolDevice", environment: .production)
+        let room = try await createRoom("Gym", eventName: "Pull-ups", by: alice)
+        _ = try await join(room.id, by: bob)
+        _ = try await join(room.id, by: carol)
+
+        try await swipe(room.id, by: alice)
+
+        let deliveries = await pushNotifier.deliveries
+        XCTAssertEqual(Set(deliveries.first?.targets ?? []), [
+            PushTarget(deviceToken: "bobDevice", environment: .sandbox),
+            PushTarget(deviceToken: "carolDevice", environment: .production),
+        ])
+    }
+
+    func test_deviceTokenWithoutEnvironment_isSandbox() async throws {
+        let bob = try await register("Bob", deviceToken: "bobDevice")
+
+        let stored = try await User.find(bob.id, on: app.db)
+
+        XCTAssertEqual(stored?.pushTarget, PushTarget(deviceToken: "bobDevice", environment: .sandbox))
+    }
+
+    func test_unknownEnvironment_isRejected() async throws {
+        let bob = try await register("Bob")
+
+        try await app.test(.PATCH, "v1/users/me", beforeRequest: { req async throws in
+            req.headers.bearerAuthorization = .init(token: bob.token)
+            try req.content.encode(["deviceToken": "bobDevice", "deviceEnvironment": "staging"])
+        }, afterResponse: { res async throws in
+            XCTAssertEqual(res.status, .badRequest)
+        })
+    }
+
+    func test_tokenRejectedByAPNs_isRemoved() async throws {
+        let alice = try await register("Alice")
+        let bob = try await register("Bob", deviceToken: "bobDevice")
+        let room = try await createRoom("Gym", eventName: "Pull-ups", by: alice)
+        _ = try await join(room.id, by: bob)
+        await pushNotifier.reject(["bobDevice"])
+
+        try await swipe(room.id, by: alice)
+        try await swipe(room.id, by: alice)
+
+        let deliveries = await pushNotifier.deliveries
+        let stored = try await User.find(bob.id, on: app.db)
+        XCTAssertEqual(deliveries.count, 1, "second swipe has nobody to notify")
+        XCTAssertNil(stored?.deviceToken)
+    }
+
+    func test_tokenRegisteredByNewUser_isRemovedFromPreviousUser() async throws {
+        let before = try await register("Bob", deviceToken: "bobDevice")
+
+        let after = try await register("Bob", deviceToken: "bobDevice")
+
+        let previous = try await User.find(before.id, on: app.db)
+        let current = try await User.find(after.id, on: app.db)
+        XCTAssertNil(previous?.deviceToken)
+        XCTAssertEqual(current?.deviceToken, "bobDevice")
+    }
 }

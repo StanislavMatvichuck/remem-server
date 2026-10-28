@@ -15,7 +15,6 @@ struct Settings: Sendable {
         let teamId: String
         let privateKey: String
         let topic: String
-        let production: Bool
     }
 
     let port: Int
@@ -50,8 +49,7 @@ struct Settings: Sendable {
                 teamId: teamId,
                 /// Railway variables are single line, so `\n` sequences are accepted in place of line breaks
                 privateKey: privateKey.replacingOccurrences(of: "\\n", with: "\n"),
-                topic: environment["APNS_TOPIC"] ?? "io.remem",
-                production: environment["APNS_ENVIRONMENT"] == "production"
+                topic: environment["APNS_TOPIC"] ?? "io.remem"
             )
         } else {
             apns = nil

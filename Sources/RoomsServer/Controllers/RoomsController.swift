@@ -17,6 +17,7 @@ struct RoomsController: RouteCollection {
         rooms.group(":roomId") { room in
             room.get(use: show)
             room.post("members", use: join)
+            room.delete("members", "me", use: leave)
             room.post("happenings", use: addHappening)
             room.put("members", ":userId", "notifications", use: setNotifications)
         }
@@ -73,6 +74,38 @@ struct RoomsController: RouteCollection {
         }
 
         return try await RoomPresenter(req).dto(room, viewer: user)
+    }
+
+    /// `DELETE /v1/rooms/:roomId/members/me` removes user with their swipes and mutes, room without members is deleted
+    @Sendable func leave(req: Request) async throws -> HTTPStatus {
+        let user = try req.auth.require(User.self)
+        let room = try await findRoom(req)
+        let roomId = try room.requireID()
+        let userId = try user.requireID()
+        guard let membership = try await membership(room, user, on: req.db) else { throw Abort(.notFound) }
+
+        try await req.db.transaction { db in
+            try await membership.delete(on: db)
+
+            try await RoomHappening.query(on: db)
+                .filter(\.$room.$id == roomId)
+                .filter(\.$user.$id == userId)
+                .delete()
+
+            try await NotificationMute.query(on: db)
+                .filter(\.$room.$id == roomId)
+                .group(.or) { $0.filter(\.$receiver.$id == userId).filter(\.$sender.$id == userId) }
+                .delete()
+
+            if try await Membership.query(on: db).filter(\.$room.$id == roomId).count() == 0 {
+                try await RoomHappening.query(on: db).filter(\.$room.$id == roomId).delete()
+                try await NotificationMute.query(on: db).filter(\.$room.$id == roomId).delete()
+                try await room.delete(on: db)
+                req.logger.notice("room \(roomId) deleted, last member left")
+            }
+        }
+
+        return .noContent
     }
 
     /// `POST /v1/rooms/:roomId/happenings` records a swipe and notifies members
@@ -168,24 +201,39 @@ struct RoomsController: RouteCollection {
                 .all()
                 .map { $0.$receiver.id })
 
-            let deviceTokens = try await Membership.query(on: req.db)
+            let recipients = try await Membership.query(on: req.db)
                 .filter(\.$room.$id == roomId)
                 .filter(\.$user.$id != senderId)
                 .with(\.$user)
                 .all()
-                .filter { !mutedBy.contains($0.$user.id) }
-                .compactMap { $0.user.deviceToken }
+            let notMuted = recipients.filter { !mutedBy.contains($0.$user.id) }
+            let targets = notMuted.compactMap { $0.user.pushTarget }
 
-            guard !deviceTokens.isEmpty else { return }
+            guard !targets.isEmpty else {
+                req.logger.notice("""
+                push skipped for room \(roomId): \(recipients.count) other members, \
+                \(recipients.count - notMuted.count) muted sender, \(notMuted.count - targets.count) without device token
+                """)
+                return
+            }
 
-            await req.application.pushNotifier.send(
+            let rejected = await req.application.pushNotifier.send(
                 PushMessage(
                     title: room.name,
                     body: "\(sender.name) · \(room.eventName) · \(count)",
                     roomId: roomId
                 ),
-                to: deviceTokens
+                to: targets
             )
+
+            /// App was removed from device or token belongs to another environment
+            if !rejected.isEmpty {
+                try await User.query(on: req.db)
+                    .filter(\.$deviceToken ~~ rejected)
+                    .set(\.$deviceToken, to: nil)
+                    .set(\.$deviceEnvironment, to: nil)
+                    .update()
+            }
         } catch {
             req.logger.warning("unable to notify room members: \(String(reflecting: error))")
         }

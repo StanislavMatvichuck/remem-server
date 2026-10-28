@@ -55,11 +55,14 @@ struct UpdateProfileInput: Content, Validatable {
     let name: String?
     let color: String?
     let deviceToken: String?
+    /// `sandbox` when omitted
+    let deviceEnvironment: PushEnvironment?
 
     static func validations(_ validations: inout Validations) {
         validations.add("name", as: String.self, is: .count(...Limits.name), required: false)
         validations.add("color", as: String.self, is: .pattern(Limits.colorPattern), required: false)
         validations.add("deviceToken", as: String.self, is: .count(...200) && .characterSet(.alphanumerics), required: false)
+        validations.add("deviceEnvironment", as: String.self, is: .in(PushEnvironment.allCases.map(\.rawValue)), required: false)
     }
 }
 

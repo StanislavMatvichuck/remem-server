@@ -41,7 +41,24 @@ struct ProfileController: RouteCollection {
 
         if let name = input.name { user.name = name }
         if let color = input.color { user.color = color }
-        if let deviceToken = input.deviceToken { user.deviceToken = deviceToken.isEmpty ? nil : deviceToken }
+
+        if let deviceToken = input.deviceToken {
+            let token = deviceToken.isEmpty ? nil : deviceToken
+            user.deviceToken = token
+            user.deviceEnvironment = token == nil ? nil : (input.deviceEnvironment ?? .sandbox).rawValue
+            let userId = try user.requireID()
+            req.logger.notice("device token \(token == nil ? "removed" : "registered for \(user.deviceEnvironment ?? "")") for user \(userId)")
+
+            /// After reinstall the app registers a new user, so the same device must stop receiving pushes for the old one
+            if let token {
+                try await User.query(on: req.db)
+                    .filter(\.$deviceToken == token)
+                    .filter(\.$id != userId)
+                    .set(\.$deviceToken, to: nil)
+                    .set(\.$deviceEnvironment, to: nil)
+                    .update()
+            }
+        }
 
         try await user.save(on: req.db)
         return try UserDTO(user)

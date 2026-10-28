@@ -34,7 +34,12 @@ class RoomsServerTestCase: XCTestCase {
         let token: String
     }
 
-    func register(_ name: String, color: String = "#FF9500", deviceToken: String? = nil) async throws -> RegisteredUser {
+    func register(
+        _ name: String,
+        color: String = "#FF9500",
+        deviceToken: String? = nil,
+        environment: PushEnvironment? = nil
+    ) async throws -> RegisteredUser {
         var registration: RegistrationDTO!
 
         try await app.test(.POST, "v1/users", beforeRequest: { req async throws in
@@ -49,7 +54,9 @@ class RoomsServerTestCase: XCTestCase {
         if let deviceToken {
             try await app.test(.PATCH, "v1/users/me", beforeRequest: { req async throws in
                 req.headers.bearerAuthorization = .init(token: user.token)
-                try req.content.encode(["deviceToken": deviceToken])
+                var body = ["deviceToken": deviceToken]
+                if let environment { body["deviceEnvironment"] = environment.rawValue }
+                try req.content.encode(body)
             }, afterResponse: { res async throws in
                 XCTAssertEqual(res.status, .ok)
             })
@@ -100,6 +107,18 @@ class RoomsServerTestCase: XCTestCase {
         return room
     }
 
+    func leave(_ roomId: UUID, by user: RegisteredUser) async throws -> HTTPStatus {
+        var status: HTTPStatus!
+
+        try await app.test(.DELETE, "v1/rooms/\(roomId)/members/me", beforeRequest: { req async throws in
+            req.headers.bearerAuthorization = .init(token: user.token)
+        }, afterResponse: { res async throws in
+            status = res.status
+        })
+
+        return status
+    }
+
     func setNotifications(_ enabled: Bool, roomId: UUID, member: UUID, by user: RegisteredUser) async throws -> RoomDTO {
         var room: RoomDTO!
 
@@ -118,12 +137,19 @@ class RoomsServerTestCase: XCTestCase {
 actor PushNotifierSpy: PushNotifying {
     struct Delivery: Equatable {
         let message: PushMessage
-        let deviceTokens: [String]
+        let targets: [PushTarget]
+
+        var deviceTokens: [String] { targets.map(\.deviceToken) }
     }
 
     private(set) var deliveries = [Delivery]()
+    private var rejectedTokens = Set<String>()
 
-    func send(_ message: PushMessage, to deviceTokens: [String]) async {
-        deliveries.append(Delivery(message: message, deviceTokens: deviceTokens))
+    /// Imitates APNs answering `Unregistered` for these tokens
+    func reject(_ tokens: Set<String>) { rejectedTokens = tokens }
+
+    func send(_ message: PushMessage, to targets: [PushTarget]) async -> [String] {
+        deliveries.append(Delivery(message: message, targets: targets))
+        return targets.map(\.deviceToken).filter(rejectedTokens.contains)
     }
 }

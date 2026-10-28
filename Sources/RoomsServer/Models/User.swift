@@ -17,6 +17,8 @@ final class User: Model, Authenticatable, @unchecked Sendable {
     /// SHA256 of the bearer token, raw token is returned once at registration
     @Field(key: "token_hash") var tokenHash: String
     @OptionalField(key: "device_token") var deviceToken: String?
+    /// `PushEnvironment` raw value the device token was issued for
+    @OptionalField(key: "device_environment") var deviceEnvironment: String?
     @Timestamp(key: "created_at", on: .create) var createdAt: Date?
 
     init() {}
@@ -44,5 +46,30 @@ struct CreateUser: AsyncMigration {
 
     func revert(on database: any Database) async throws {
         try await database.schema(User.schema).delete()
+    }
+}
+
+/// Added after first deployment, tokens without environment are treated as `sandbox`
+struct AddUserDeviceEnvironment: AsyncMigration {
+    func prepare(on database: any Database) async throws {
+        try await database.schema(User.schema)
+            .field("device_environment", .string)
+            .update()
+    }
+
+    func revert(on database: any Database) async throws {
+        try await database.schema(User.schema)
+            .deleteField("device_environment")
+            .update()
+    }
+}
+
+extension User {
+    var pushTarget: PushTarget? {
+        guard let deviceToken else { return nil }
+        return PushTarget(
+            deviceToken: deviceToken,
+            environment: deviceEnvironment.flatMap(PushEnvironment.init(rawValue:)) ?? .sandbox
+        )
     }
 }

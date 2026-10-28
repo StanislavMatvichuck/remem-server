@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:remem-server}",
+            "name": "Debug RoomsServer",
+            "target": "RoomsServer",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug RoomsServer"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:remem-server}",
+            "name": "Release RoomsServer",
+            "target": "RoomsServer",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release RoomsServer"
+        }
+    ]
+}

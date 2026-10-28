@@ -5,6 +5,7 @@
 //  Created by Stanislav Matvichuck on 27.10.2026.
 //
 
+import Fluent
 @testable import RoomsServer
 import XCTVapor
 
@@ -148,5 +149,76 @@ final class RoomsTests: RoomsServerTestCase {
         try await app.test(.GET, "join/\(UUID().uuidString)", afterResponse: { res async throws in
             XCTAssertEqual(res.status, .notFound)
         })
+    }
+
+    // MARK: - Leaving
+
+    func test_leave_removesMember() async throws {
+        let alice = try await register("Alice")
+        let bob = try await register("Bob")
+        let room = try await createRoom("Gym", eventName: "Pull-ups", by: alice)
+        _ = try await join(room.id, by: bob)
+
+        let status = try await leave(room.id, by: bob)
+
+        XCTAssertEqual(status, .noContent)
+        let alicesView = try await join(room.id, by: alice)
+        XCTAssertEqual(alicesView.members.map(\.name), ["Alice"])
+
+        try await app.test(.GET, "v1/rooms", beforeRequest: { req async throws in
+            req.headers.bearerAuthorization = .init(token: bob.token)
+        }, afterResponse: { res async throws in
+            XCTAssertEqual(try res.content.decode([RoomDTO].self).count, 0)
+        })
+    }
+
+    func test_leave_removesLeaversSwipesAndMutes() async throws {
+        let alice = try await register("Alice")
+        let bob = try await register("Bob")
+        let room = try await createRoom("Gym", eventName: "Pull-ups", by: alice)
+        _ = try await join(room.id, by: bob)
+        try await swipe(room.id, by: bob)
+        _ = try await setNotifications(false, roomId: room.id, member: bob.id, by: alice)
+
+        _ = try await leave(room.id, by: bob)
+
+        let bobsSwipes = try await RoomHappening.query(on: app.db).filter(\.$user.$id == bob.id).count()
+        let mutes = try await NotificationMute.query(on: app.db).count()
+        XCTAssertEqual(bobsSwipes, 0)
+        XCTAssertEqual(mutes, 0)
+
+        let rejoined = try await join(room.id, by: bob)
+        XCTAssertEqual(rejoined.members.first { $0.isCurrentUser }?.happeningsCount, 0)
+    }
+
+    func test_leave_lastMember_deletesRoom() async throws {
+        let alice = try await register("Alice")
+        let room = try await createRoom("Gym", eventName: "Pull-ups", by: alice)
+        try await swipe(room.id, by: alice)
+
+        _ = try await leave(room.id, by: alice)
+
+        let storedRoom = try await Room.find(room.id, on: app.db)
+        let swipes = try await RoomHappening.query(on: app.db).count()
+        let memberships = try await Membership.query(on: app.db).count()
+        XCTAssertNil(storedRoom)
+        XCTAssertEqual(swipes, 0)
+        XCTAssertEqual(memberships, 0)
+
+        try await app.test(.GET, "join/\(room.id.uuidString)", afterResponse: { res async throws in
+            XCTAssertEqual(res.status, .notFound, "link of removed room does not work")
+        })
+    }
+
+    func test_leave_notMember_notFound() async throws {
+        let alice = try await register("Alice")
+        let bob = try await register("Bob")
+        let room = try await createRoom("Gym", eventName: "Pull-ups", by: alice)
+
+        let status = try await leave(room.id, by: bob)
+
+        XCTAssertEqual(status, .notFound)
+        let stored = try await Room.find(room.id, on: app.db)
+        XCTAssertNotNil(stored)
     }
 }
