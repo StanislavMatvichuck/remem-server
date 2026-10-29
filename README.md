@@ -99,6 +99,7 @@ All bodies are JSON, and dates are ISO 8601. Every `/v1` endpoint except registr
 | `POST` | `/v1/rooms/:roomId/happenings` | `{id, dateCreated}` | `Room`, records a swipe and notifies members; `id` makes it idempotent |
 | `DELETE` | `/v1/rooms/:roomId/happenings/:happeningId` | | `Room`, removes a swipe of the current user without notifying anyone |
 | `GET` | `/v1/rooms/:roomId/members/:userId/event` | | `{name, dateCreated, happenings: [{id, dateCreated}]}`, the member's room event with every swipe, oldest first; `dateCreated` is when they joined |
+| `GET` | `/v1/rooms/:roomId/events` | | `[{memberId, event}]`, events of every member in one request, for the room graphs |
 | `PUT` | `/v1/rooms/:roomId/members/:userId/notifications` | `{enabled}` | `Room`, turns notifications about that member on or off for the current user |
 | `GET` | `/join/:roomId` | | HTML page that opens `remem://rooms/join/<roomId>` |
 | `GET` | `/avatars/:userId?v=<version>` | | Photo, public and cached for a year; each upload increases `v` |

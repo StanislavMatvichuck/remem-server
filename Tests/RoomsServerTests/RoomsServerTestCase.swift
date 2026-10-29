@@ -126,6 +126,19 @@ class RoomsServerTestCase: XCTestCase {
         return room
     }
 
+    func roomEvents(_ roomId: UUID, by user: RegisteredUser) async throws -> [MemberEventDTO] {
+        var events: [MemberEventDTO]!
+
+        try await app.test(.GET, "v1/rooms/\(roomId)/events", beforeRequest: { req async throws in
+            req.headers.bearerAuthorization = .init(token: user.token)
+        }, afterResponse: { res async throws in
+            XCTAssertEqual(res.status, .ok)
+            events = try res.content.decode([MemberEventDTO].self, using: JSONDecoder.rooms)
+        })
+
+        return events
+    }
+
     func memberEvent(_ roomId: UUID, member: UUID, by user: RegisteredUser) async throws -> EventDTO {
         var event: EventDTO!
 

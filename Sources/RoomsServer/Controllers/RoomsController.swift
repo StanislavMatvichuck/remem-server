@@ -21,6 +21,7 @@ struct RoomsController: RouteCollection {
             room.post("happenings", use: addHappening)
             room.delete("happenings", ":happeningId", use: removeHappening)
             room.get("members", ":userId", "event", use: memberEvent)
+            room.get("events", use: memberEvents)
             room.put("members", ":userId", "notifications", use: setNotifications)
         }
     }
@@ -182,7 +183,37 @@ struct RoomsController: RouteCollection {
             .sort(\.$dateCreated)
             .all()
 
-        return EventDTO(
+        return Self.event(of: membership, in: room, happenings: happenings)
+    }
+
+    /// `GET /v1/rooms/:roomId/events` room events of all members, used to compare them on graphs
+    @Sendable func memberEvents(req: Request) async throws -> [MemberEventDTO] {
+        let viewer = try req.auth.require(User.self)
+        let room = try await findRoom(req)
+        let roomId = try room.requireID()
+        try await requireMembership(room, viewer, on: req.db)
+
+        let memberships = try await Membership.query(on: req.db)
+            .filter(\.$room.$id == roomId)
+            .sort(\.$joinedAt)
+            .all()
+
+        let happenings = Dictionary(grouping: try await RoomHappening.query(on: req.db)
+            .filter(\.$room.$id == roomId)
+            .sort(\.$dateCreated)
+            .all()) { $0.$user.id }
+
+        return memberships.map { membership in
+            MemberEventDTO(
+                memberId: membership.$user.id,
+                event: Self.event(of: membership, in: room, happenings: happenings[membership.$user.id] ?? [])
+            )
+        }
+    }
+
+    /// Event is created for member when joining room
+    private static func event(of membership: Membership, in room: Room, happenings: [RoomHappening]) -> EventDTO {
+        EventDTO(
             name: room.eventName,
             dateCreated: membership.joinedAt ?? .now,
             happenings: happenings.map { HappeningDTO(id: $0.happeningId, dateCreated: $0.dateCreated) }

@@ -63,6 +63,50 @@ final class MemberEventTests: RoomsServerTestCase {
         })
     }
 
+    // MARK: - Events of all members
+
+    func test_roomEvents_hasEventOfEveryMember() async throws {
+        let alice = try await register("Alice")
+        let bob = try await register("Bob")
+        let room = try await createRoom("Gym", eventName: "Pull-ups", by: alice)
+        _ = try await join(room.id, by: bob)
+        let aliceHappening = UUID()
+        let bobHappening = UUID()
+        try await swipe(room.id, by: alice, happeningId: aliceHappening, date: Date(timeIntervalSince1970: 100))
+        try await swipe(room.id, by: bob, happeningId: bobHappening, date: Date(timeIntervalSince1970: 200))
+
+        let events = try await roomEvents(room.id, by: bob)
+
+        XCTAssertEqual(Set(events.map(\.memberId)), [alice.id, bob.id])
+        XCTAssertEqual(events.first { $0.memberId == alice.id }?.event.happenings.map(\.id), [aliceHappening])
+        XCTAssertEqual(events.first { $0.memberId == bob.id }?.event.happenings.map(\.id), [bobHappening])
+        XCTAssertEqual(events.first?.event.name, "Pull-ups")
+    }
+
+    func test_roomEvents_sameAsEventOfEachMember() async throws {
+        let alice = try await register("Alice")
+        let room = try await createRoom("Gym", eventName: "Pull-ups", by: alice)
+        try await swipe(room.id, by: alice, date: Date(timeIntervalSince1970: 300))
+        try await swipe(room.id, by: alice, date: Date(timeIntervalSince1970: 100))
+
+        let events = try await roomEvents(room.id, by: alice)
+        let single = try await memberEvent(room.id, member: alice.id, by: alice)
+
+        XCTAssertEqual(events.first?.event, single)
+    }
+
+    func test_roomEvents_notMember_notFound() async throws {
+        let alice = try await register("Alice")
+        let bob = try await register("Bob")
+        let room = try await createRoom("Gym", eventName: "Pull-ups", by: alice)
+
+        try await app.test(.GET, "v1/rooms/\(room.id)/events", beforeRequest: { req async throws in
+            req.headers.bearerAuthorization = .init(token: bob.token)
+        }, afterResponse: { res async throws in
+            XCTAssertEqual(res.status, .notFound)
+        })
+    }
+
     // MARK: - Removing happenings
 
     func test_removeHappening_removesItFromEventAndCount() async throws {

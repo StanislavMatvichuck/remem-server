@@ -96,6 +96,11 @@ struct EventDTO: Content, Equatable {
     let happenings: [HappeningDTO]
 }
 
+struct MemberEventDTO: Content, Equatable {
+    let memberId: UUID
+    let event: EventDTO
+}
+
 struct NotificationsInput: Content {
     let enabled: Bool
 }
