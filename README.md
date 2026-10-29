@@ -1,6 +1,6 @@
 # Remem Rooms server
 
-Swift [Vapor](https://vapor.codes) server behind the Rooms feature of [Remem](https://github.com/StanislavMatvichuck/remem). Rooms let users share one event: every member gets the room event in their events list, each swipe is sent here, and other members receive a push notification unless they turned notifications off for that member.
+Swift [Vapor](https://vapor.codes) server behind the Rooms feature of [Remem](https://github.com/StanislavMatvichuck/remem). Rooms let users share one event: every member gets the room event in their events list, its swipes are stored here so other members can open it, and other members receive a push notification unless they turned notifications off for that member.
 
 ## Run locally
 
@@ -97,6 +97,8 @@ All bodies are JSON, and dates are ISO 8601. Every `/v1` endpoint except registr
 | `POST` | `/v1/rooms/:roomId/members` | | `Room`, joins the room, repeated calls are ignored |
 | `DELETE` | `/v1/rooms/:roomId/members/me` | | `204`, leaves the room and removes the user's swipes and mutes in it; a room without members is deleted |
 | `POST` | `/v1/rooms/:roomId/happenings` | `{id, dateCreated}` | `Room`, records a swipe and notifies members; `id` makes it idempotent |
+| `DELETE` | `/v1/rooms/:roomId/happenings/:happeningId` | | `Room`, removes a swipe of the current user without notifying anyone |
+| `GET` | `/v1/rooms/:roomId/members/:userId/event` | | `{name, dateCreated, happenings: [{id, dateCreated}]}`, the member's room event with every swipe, oldest first; `dateCreated` is when they joined |
 | `PUT` | `/v1/rooms/:roomId/members/:userId/notifications` | `{enabled}` | `Room`, turns notifications about that member on or off for the current user |
 | `GET` | `/join/:roomId` | | HTML page that opens `remem://rooms/join/<roomId>` |
 | `GET` | `/avatars/:userId?v=<version>` | | Photo, public and cached for a year; each upload increases `v` |

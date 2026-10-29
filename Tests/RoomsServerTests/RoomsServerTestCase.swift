@@ -93,18 +93,50 @@ class RoomsServerTestCase: XCTestCase {
     }
 
     @discardableResult
-    func swipe(_ roomId: UUID, by user: RegisteredUser, happeningId: UUID = UUID()) async throws -> RoomDTO {
+    func swipe(
+        _ roomId: UUID,
+        by user: RegisteredUser,
+        happeningId: UUID = UUID(),
+        date: Date = Date(timeIntervalSince1970: 0)
+    ) async throws -> RoomDTO {
         var room: RoomDTO!
 
         try await app.test(.POST, "v1/rooms/\(roomId)/happenings", beforeRequest: { req async throws in
             req.headers.bearerAuthorization = .init(token: user.token)
-            try req.content.encode(HappeningInput(id: happeningId, dateCreated: Date(timeIntervalSince1970: 0)), using: JSONEncoder.rooms)
+            try req.content.encode(HappeningInput(id: happeningId, dateCreated: date), using: JSONEncoder.rooms)
         }, afterResponse: { res async throws in
             XCTAssertEqual(res.status, .ok)
             room = try res.content.decode(RoomDTO.self, using: JSONDecoder.rooms)
         })
 
         return room
+    }
+
+    @discardableResult
+    func removeHappening(_ happeningId: UUID, roomId: UUID, by user: RegisteredUser) async throws -> RoomDTO {
+        var room: RoomDTO!
+
+        try await app.test(.DELETE, "v1/rooms/\(roomId)/happenings/\(happeningId)", beforeRequest: { req async throws in
+            req.headers.bearerAuthorization = .init(token: user.token)
+        }, afterResponse: { res async throws in
+            XCTAssertEqual(res.status, .ok)
+            room = try res.content.decode(RoomDTO.self, using: JSONDecoder.rooms)
+        })
+
+        return room
+    }
+
+    func memberEvent(_ roomId: UUID, member: UUID, by user: RegisteredUser) async throws -> EventDTO {
+        var event: EventDTO!
+
+        try await app.test(.GET, "v1/rooms/\(roomId)/members/\(member)/event", beforeRequest: { req async throws in
+            req.headers.bearerAuthorization = .init(token: user.token)
+        }, afterResponse: { res async throws in
+            XCTAssertEqual(res.status, .ok)
+            event = try res.content.decode(EventDTO.self, using: JSONDecoder.rooms)
+        })
+
+        return event
     }
 
     func leave(_ roomId: UUID, by user: RegisteredUser) async throws -> HTTPStatus {

@@ -84,6 +84,18 @@ struct HappeningInput: Content {
     let dateCreated: Date
 }
 
+struct HappeningDTO: Content, Equatable {
+    let id: UUID
+    let dateCreated: Date
+}
+
+/// Room event of a single member
+struct EventDTO: Content, Equatable {
+    let name: String
+    let dateCreated: Date
+    let happenings: [HappeningDTO]
+}
+
 struct NotificationsInput: Content {
     let enabled: Bool
 }

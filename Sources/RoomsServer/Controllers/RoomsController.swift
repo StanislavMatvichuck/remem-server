@@ -19,6 +19,8 @@ struct RoomsController: RouteCollection {
             room.post("members", use: join)
             room.delete("members", "me", use: leave)
             room.post("happenings", use: addHappening)
+            room.delete("happenings", ":happeningId", use: removeHappening)
+            room.get("members", ":userId", "event", use: memberEvent)
             room.put("members", ":userId", "notifications", use: setNotifications)
         }
     }
@@ -140,6 +142,51 @@ struct RoomsController: RouteCollection {
         }
 
         return dto
+    }
+
+    /// `DELETE /v1/rooms/:roomId/happenings/:happeningId` removes swipe of authenticated user, members are not notified
+    @Sendable func removeHappening(req: Request) async throws -> RoomDTO {
+        let user = try req.auth.require(User.self)
+        let room = try await findRoom(req)
+        let roomId = try room.requireID()
+        let userId = try user.requireID()
+        guard let happeningId = req.parameters.get("happeningId", as: UUID.self) else { throw Abort(.badRequest) }
+        try await requireMembership(room, user, on: req.db)
+
+        try await RoomHappening.query(on: req.db)
+            .filter(\.$room.$id == roomId)
+            .filter(\.$user.$id == userId)
+            .filter(\.$happeningId == happeningId)
+            .delete()
+
+        return try await RoomPresenter(req).dto(room, viewer: user)
+    }
+
+    /// `GET /v1/rooms/:roomId/members/:userId/event` room event of a member with all happenings
+    @Sendable func memberEvent(req: Request) async throws -> EventDTO {
+        let viewer = try req.auth.require(User.self)
+        let room = try await findRoom(req)
+        let roomId = try room.requireID()
+        guard let memberId = req.parameters.get("userId", as: UUID.self) else { throw Abort(.badRequest) }
+        try await requireMembership(room, viewer, on: req.db)
+
+        guard let membership = try await Membership.query(on: req.db)
+            .filter(\.$room.$id == roomId)
+            .filter(\.$user.$id == memberId)
+            .first()
+        else { throw Abort(.notFound) }
+
+        let happenings = try await RoomHappening.query(on: req.db)
+            .filter(\.$room.$id == roomId)
+            .filter(\.$user.$id == memberId)
+            .sort(\.$dateCreated)
+            .all()
+
+        return EventDTO(
+            name: room.eventName,
+            dateCreated: membership.joinedAt ?? .now,
+            happenings: happenings.map { HappeningDTO(id: $0.happeningId, dateCreated: $0.dateCreated) }
+        )
     }
 
     /// `PUT /v1/rooms/:roomId/members/:userId/notifications` mutes or unmutes a member for authenticated user

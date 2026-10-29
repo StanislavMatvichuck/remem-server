@@ -65,6 +65,20 @@ final class NotificationsTests: RoomsServerTestCase {
         XCTAssertTrue(deliveries.isEmpty)
     }
 
+    func test_removeHappening_notifiesNobody() async throws {
+        let alice = try await register("Alice", deviceToken: "aliceDevice")
+        let bob = try await register("Bob", deviceToken: "bobDevice")
+        let room = try await createRoom("Gym", eventName: "Pull-ups", by: alice)
+        _ = try await join(room.id, by: bob)
+        let happeningId = UUID()
+        try await swipe(room.id, by: alice, happeningId: happeningId)
+
+        try await removeHappening(happeningId, roomId: room.id, by: alice)
+
+        let deliveries = await pushNotifier.deliveries
+        XCTAssertEqual(deliveries.count, 1, "Only adding happening notifies")
+    }
+
     func test_repeatedSwipe_notifiesOnce() async throws {
         let alice = try await register("Alice")
         let bob = try await register("Bob", deviceToken: "bobDevice")
