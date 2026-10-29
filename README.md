@@ -110,7 +110,7 @@ All bodies are JSON, and dates are ISO 8601. Every `/v1` endpoint except registr
   "name": "Gym",
   "eventName": "Pull-ups",
   "link": "https://<domain>/join/<id>",
-  "members": [{
+  "members": [{ // most happeningsCount first, equal totals in joining order
     "id": "UUID",
     "name": "Alice",
     "color": "#34C759",

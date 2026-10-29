@@ -331,12 +331,19 @@ struct RoomPresenter {
             ))
         }
 
+        /// Most happenings first, members with equal total stay in joining order
+        let ranked = members.enumerated().sorted { lhs, rhs in
+            lhs.element.happeningsCount == rhs.element.happeningsCount ?
+                lhs.offset < rhs.offset :
+                lhs.element.happeningsCount > rhs.element.happeningsCount
+        }
+
         return RoomDTO(
             id: roomId,
             name: room.name,
             eventName: room.eventName,
             link: settings.joinLink(roomId: roomId),
-            members: members
+            members: ranked.map(\.element)
         )
     }
 }

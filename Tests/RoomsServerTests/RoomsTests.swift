@@ -52,6 +52,47 @@ final class RoomsTests: RoomsServerTestCase {
         XCTAssertEqual(joined.members.first { $0.isCurrentUser }?.name, "Bob")
     }
 
+    func test_members_sortedByTotalAmount() async throws {
+        let alice = try await register("Alice")
+        let bob = try await register("Bob")
+        let carol = try await register("Carol")
+        let room = try await createRoom("Gym", eventName: "Pull-ups", by: alice)
+        _ = try await join(room.id, by: bob)
+        _ = try await join(room.id, by: carol)
+        try await swipe(room.id, by: carol)
+        try await swipe(room.id, by: bob)
+
+        let updated = try await swipe(room.id, by: bob)
+
+        XCTAssertEqual(updated.members.map(\.name), ["Bob", "Carol", "Alice"])
+    }
+
+    func test_members_equalTotal_keepJoiningOrder() async throws {
+        let alice = try await register("Alice")
+        let bob = try await register("Bob")
+        let room = try await createRoom("Gym", eventName: "Pull-ups", by: alice)
+        _ = try await join(room.id, by: bob)
+        try await swipe(room.id, by: bob)
+
+        let updated = try await swipe(room.id, by: alice)
+
+        XCTAssertEqual(updated.members.map(\.name), ["Alice", "Bob"])
+    }
+
+    func test_members_removedHappening_movesMemberDown() async throws {
+        let alice = try await register("Alice")
+        let bob = try await register("Bob")
+        let room = try await createRoom("Gym", eventName: "Pull-ups", by: alice)
+        _ = try await join(room.id, by: bob)
+        let happeningId = UUID()
+        let swiped = try await swipe(room.id, by: bob, happeningId: happeningId)
+
+        let updated = try await removeHappening(happeningId, roomId: room.id, by: bob)
+
+        XCTAssertEqual(swiped.members.map(\.name), ["Bob", "Alice"])
+        XCTAssertEqual(updated.members.map(\.name), ["Alice", "Bob"])
+    }
+
     func test_join_twice_keepsSingleMembership() async throws {
         let alice = try await register("Alice")
         let bob = try await register("Bob")
